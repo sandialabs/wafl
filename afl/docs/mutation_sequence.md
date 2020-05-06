@@ -1,0 +1,19 @@
+Mutation case|Semantic description|Index semantics|
+----|----|----|
+0|Single bit flip somewhere|1: bit position that was flipped
+1|Set some byte to an interesting value|1: byte position<br>2: byte value that was set
+2|Set some word to an interesting value, randomly choosing endian. For ease of use, endian chosen and interesting value are both stored|1: word offset <br>2: word value that was set <br>3: endian
+3|Set some dword to an interesting value, randomly choosing endian. For ease of use, endian chosen and interesting value are both stored|1: word offset <br>2: dword value that was set <br>3: endian (falsey means swapped, truthy means same endian as before)
+4|Randomly subtract from some byte|1: byte position that was subtracted from <br>2: value that was subtracted
+5|Randomly add to some byte|1: byte position that was added to <br>2: value that was added
+6|Randomly subtract a value from a word, random endian|1: word position that was subtracted from <br>2: value that was subtracted <br>3: endian (falsey means swapped, truthy means same endian as before)
+7|Randomly add a value to a word, random endian|1: word position that was added to <br>2: value that was added <br>3: endian (falsey means swapped, truthy means same endian as before)
+8|Randomly subtract a value from a dword, random endian|1: dword position that was subtracted from <br>2: value that was subtracted <br>3: endian (falsey means swapped, truthy means same endian as before)
+9|Randomly add a value to a dword, random endian|1: dword position that was added to <br>2: value that was added <br>3: endian (falsey means swapped, truthy means same endian as before)
+10|Set a random byte to a random value using XOR|1: byte position that was XOR'd <br>2: xor value
+11|Delete bytes|1: del_len (length of deletion) <br>2: del_from (position to start deleting from)
+12|Same as 11|
+13|Clone bytes or insert a block of constant bytes. If inserting a block of constant bytes, parameter indices 4, 5, and 6 define additional meaningful values|1: whether bytes were cloned (truthy) or not (falsey) <br>2: clone_len (length of cloned bytes) <br>3: clone_len (position that clone started at) <br>4: if true, executed `memset(new_buf + clone_to, <value at index 6>, clone_len)`; else executed `memset(new_buf + clone_to, out_buf[<value at position 5>]), clone_len)` <br>5: used if 4 is false <br>6: used if 4 is true
+14|Overwrite bytes with a randomly selected chunk (75%) or fixed bytes (25%)|1: whether bytes were overwritten with a random chunk (truthy) or fixed bytes (falsey) <br>2: copy_len (length of overwritten bytes) <br>3: copy_from location, if parameter 1 is truthy <br>4: copy_to location, if parameter 1 is truthy <br>5: if true, executed `memset(out_buf + copy_to, <value at index 6>, copy_len)`; else executed `memset(out_buf + copy_to, out_buf[<value at index 7>], copy_len)` <br>6: used if 5 is true <br>7: used if 5 is false
+15|Used only if there are any extras present in the dictionaries. Overwrites bytes with an extra (executes `memcpy(out_buf + <value at index 4>, a_extras[<value at index 2>].data, <value at index 3>)`)|1: If true and no user-specified extras, the rest of the parameters are selected using auto-detected extras; else the rest of the parameters are selected using user-specified extras <br>2: Which extra was randomly selected (auto or user-specified depending on 1) <br>3: The length of the extra <br>4: Position at which bytes are inserted (randomly selected)
+16|Acts like case 15, but inserts an extra instead of overwriting existing bytes. After copying existing bytes, executes `memcpy(out_buf + <value at index 4>, a_extras[<value at index 2>].data, <value at index 3>)`|See parameters for case 15
