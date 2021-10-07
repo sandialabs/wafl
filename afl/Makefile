@@ -22,8 +22,6 @@ HELPER_PATH = $(PREFIX)/lib/afl
 DOC_PATH    = $(PREFIX)/share/doc/afl
 MISC_PATH   = $(PREFIX)/share/afl
 
-PYTHON ?= python3.5m
-
 # PROGS intentionally omit afl-as, which gets installed elsewhere.
 
 PROGS       = afl-gcc afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-analyze
@@ -33,8 +31,14 @@ CFLAGS     ?= -O3 -funroll-loops
 CFLAGS     += -Wall -D_FORTIFY_SOURCE=2 -g -Wno-pointer-sign \
 	      -DAFL_PATH=\"$(HELPER_PATH)\" -DDOC_PATH=\"$(DOC_PATH)\" \
 	      -DBIN_PATH=\"$(BIN_PATH)\"
-CFLAGS     += -I/usr/include/$(PYTHON)
-LDFLAGS    += -l$(PYTHON)
+ifdef PYTHON
+	# allow the user to override with e.g.: PYTHON=python3.7m make
+	CFLAGS     += -I/usr/include/$(PYTHON)
+	LDFLAGS    += -l$(PYTHON)
+else
+	CFLAGS += $(shell python3-config --includes)
+	LDFLAGS += $(shell python3-config --ldflags)
+endif
 
 ifneq "$(filter Linux GNU%,$(shell uname))" ""
   LDFLAGS  += -ldl

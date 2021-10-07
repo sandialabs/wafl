@@ -70,7 +70,7 @@ class WAflModel(WAflInterface):
 
     def binarize_cov(self,cov):
         cov = np.frombuffer(cov, dtype=np.uint8)
-        return np.where(cov==0,cov, 1)
+        return np.where(cov==0, 0, 1).astype(np.uint8)
 
     def got_new_seed(self, seed_id, buf, cov):
         """
@@ -89,6 +89,12 @@ class WAflModel(WAflInterface):
         self.seed_table[seed_id] = np.frombuffer(buf, dtype=np.uint8)
         self.weight_table[seed_id] = np.zeros(len(buf), dtype=np.float64)
         self.latest_cov[seed_id] = self.binarize_cov(cov)
+        # with np.printoptions(threshold=np.inf, suppress=True):
+        #     print('cov nonzero at:')
+        #     print(np.where(self.latest_cov[seed_id]))
+        #     print('seed nonzero at:')
+        #     print(np.where(self.seed_table[seed_id]))
+
 
     def get_weights(self, seed_id):
         """
@@ -119,9 +125,23 @@ class WAflModel(WAflInterface):
         :return: array of [0,0,1] where 1 is a byte change
         """
         seed_bytes = self.seed_table[seed_id]
-        return new_bytes ^ seed_bytes
+        # return new_bytes ^ seed_bytes
+        return (new_bytes != seed_bytes).astype(np.uint8)
 
-    def calc_cov_change(self, seed_id, cov_new):
+    _cov_change_cache = {}
+    def calc_cov_change(self, seed_id, cov_new, old_cksum, new_cksum):
+        # check the cache first
+        t = (old_cksum, new_cksum)
+        result = self._cov_change_cache.get(t, None)
+        if result is not None:
+            # yay cache hit
+            return result
+        # boo we have to call the real function
+        result = self._calc_cov_change(seed_id, cov_new)
+        self._cov_change_cache[t] = result
+        return result
+
+    def _calc_cov_change(self, seed_id, cov_new):
         """
         (int, str) -> int
         Calculate the coverage change between latest stored coverage of seed_id and cov_new
@@ -134,6 +154,8 @@ class WAflModel(WAflInterface):
         # TODO, think about this:             # if the branches that differed were ones that we've hit a lot before (relative "a lot"), should we reward that?
         cov_old = self.latest_cov[seed_id]
         cov_new = self.binarize_cov(cov_new)
+
+        # print('old != new:', np.where(cov_old != cov_new))
 
         # NO CHANGE
         if len(cov_new) == len(cov_old) and np.all(cov_new == cov_old):
@@ -152,7 +174,8 @@ class WAflModel(WAflInterface):
         # There was a change and overall, coverage increased
         if (cov_new_sum > cov_old_sum) and np.all(change):
             # Since it was a strict increase, store this new increase
-            self.latest_cov[seed_id] = cov_new
+            # TODO DGL - I don't think we should ever modify latest_cov this; just stick with the coverage of the actual seed
+            # self.latest_cov[seed_id] = cov_new
             cov_return = COV_INCREASE
         # ** Soft increase
         # There was a change and overall, the coverage didn't increase
@@ -179,7 +202,7 @@ class WAflModel(WAflInterface):
         return cov_return
 
 
-    def got_training(self, seed_id, new_bytes, cov_new, mutation_seq, splicing_with):
+    def got_training(self, seed_id, new_bytes, cov_new, mutation_seq, splicing_with, old_cksum, new_cksum):
         """
         Given a buffer and edge coverage from AFL, update the seed_id's weights
 
@@ -188,7 +211,6 @@ class WAflModel(WAflInterface):
         :param cov_new: edge coverage of new_bytes
         :return:
         """
-
         # Get seed bytes
         seed_bytes = self.seed_table[seed_id]
         # TODO: Only calculate change if one ancestor. Handle this if too many instances where >1 ancestor
@@ -198,8 +220,10 @@ class WAflModel(WAflInterface):
             # calculate bytes_changed from new_bytes
             bytes_changed = self.calc_bytes_changed(seed_id, new_bytes)
 
-            cov_change = self.calc_cov_change(seed_id, cov_new)
-
+            cov_change = self.calc_cov_change(seed_id, cov_new, old_cksum, new_cksum)
+            # print('cov_change:', cov_change)
+            # print(np.where(cov_new))
+            # print(np.where(bytes_changed))
             # if edge coverage increases
             if cov_change == COV_INCREASE:
                 self.weight_table[seed_id] = self.weight_table[seed_id] + bytes_changed  # NUMBER 1 REWARD
@@ -314,9 +338,9 @@ class WAflModel(WAflInterface):
 
 
 if __name__ == "__main__":
-    import cProfile
-    profile = cProfile.Profile()
-    profile.enable()
+    # import cProfile
+    # profile = cProfile.Profile()
+    # profile.enable()
 
     import argparse
 
@@ -325,13 +349,13 @@ if __name__ == "__main__":
     gamma =  float(os.environ["WAFL_GAMMA"]) if "WAFL_GAMMA" in os.environ else 0.3
     delta =  float(os.environ["WAFL_DELTA"]) if "WAFL_DELTA" in os.environ else 0.2
     epsilon =  float(os.environ["WAFL_EPSILON"]) if "WAFL_EPSILON" in os.environ else 0.1
-    savedir = os.environ["SAVE_DIR"] if "SAVE_DIR" in os.environ else None
+    # savedir = os.environ["SAVE_DIR"] if "SAVE_DIR" in os.environ else None
 
-    print ("Outputing incremental save to {}".format(savedir))
-    if savedir is not None:
-        with open("{}/params.csv".format(savedir), 'w') as fd:
-            fd.write("alpha,beta,gamma,delta,epsilon\n")
-            fd.write("{},{},{},{},{}\n".format(alpha,beta,gamma,delta,epsilon))
+    # print ("Outputing incremental save to {}".format(savedir))
+    # if savedir is not None:
+    #     with open("{}/params.csv".format(savedir), 'w') as fd:
+    #         fd.write("alpha,beta,gamma,delta,epsilon\n")
+    #         fd.write("{},{},{},{},{}\n".format(alpha,beta,gamma,delta,epsilon))
 
     wafl = WAflModel(
         alpha = alpha,
@@ -339,6 +363,7 @@ if __name__ == "__main__":
         gamma = gamma,
         delta = delta,
         epsilon = epsilon,
-        stats=MultiStats(),
-        profile=profile,
-        save_incremental_dir=savedir)
+        # stats=MultiStats(),
+        # profile=profile,
+        # save_incremental_dir=savedir
+        )

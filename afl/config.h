@@ -125,6 +125,7 @@
 #define SKIP_NFAV_OLD_PROB  95 /* ...no new favs, cur entry already fuzzed */
 #define SKIP_NFAV_NEW_PROB  75 /* ...no new favs, cur entry not fuzzed yet */
 #define SKIP_VARIABLE_HAVOC_STAGE 75
+// #define SKIP_VARIABLE_HAVOC_STAGE 100
 
 /* Splicing cycle count: */
 

@@ -15,12 +15,12 @@ class WAflInterface(object):
 
     ### Low-Level API
 
-    def _post_fuzz_callback(self, id, fault, buf, cov, splicing_with, mutation_seq):
+    def _post_fuzz_callback(self, id, fault, buf, cov, splicing_with, mutation_seq, old_cksum, new_cksum):
         # TODO get the mutation_sequence from afl
-        self.got_training(id, buf, cov, mutation_seq, None if splicing_with == -1 else splicing_with)
+        self.got_training(id, buf, cov, mutation_seq, None if splicing_with == -1 else splicing_with, old_cksum, new_cksum)
 
     def _new_entry_callback(self, id, fault, fn, alias_fn, buf, cov):
-        self._alias_paths[id] = alias_fn
+        self._alias_paths[id] = alias_fn.decode()
         # in case this is a "re-discover" of a trimmed seed, erase stale alias tables
         try: os.remove(alias_fn)
         except OSError: pass
@@ -44,7 +44,7 @@ class WAflInterface(object):
         """This function will be called when wafl adds a new seed to the queue"""
         raise NotImplementedError
 
-    def got_training(self, orig_seed_id, buf, cov, mutation_seq, splicing_with):
+    def got_training(self, orig_seed_id, buf, cov, mutation_seq, splicing_with, old_cksum, new_cksum):
         """This function will be called when wafl mutates a buffer and
            calculates coverage for that buffer"""
         raise NotImplementedError

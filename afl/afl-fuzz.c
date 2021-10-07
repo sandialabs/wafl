@@ -28,12 +28,15 @@
 
 */
 
-#define AFL_MAIN
-#define MESSAGES_TO_STDOUT
-
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+
+#define AFL_MAIN
+#define MESSAGES_TO_STDOUT
+
+#include "pycallback.h"
+
 #define _FILE_OFFSET_BITS 64
 
 #include "config.h"
@@ -41,7 +44,6 @@
 #include "debug.h"
 #include "alloc-inl.h"
 #include "hash.h"
-#include "pycallback.h"
 #include "random.h"
 
 #include <stdio.h>
@@ -4680,7 +4682,17 @@ EXP_ST u8 common_fuzz_stuff(char** argv, u8* out_buf, u32 len) {
   write_to_testcase(out_buf, len);
 
   fault = run_target(argv, exec_tmout);
-  call_py_post_fuzz_callback(queue_cur->id, fault, out_buf, len, trace_bits, MAP_SIZE, splicing_with, (u8*)mutation_sequence, sizeof(mutation_sequence));
+  #if 0
+  u32 cksum = 0;
+  #else
+  // This is an extra calculation of the cksum that is usually done in
+  // save_if_interesting when new bits are found (has_new_bits).  For some cases
+  // it may be slower (less than 10%) to do this here but in general it is a
+  // speed up if the Python callback takes advantage of the checksum.
+  u32 cksum = hash32(trace_bits, MAP_SIZE, HASH_CONST);
+  #endif
+  call_py_post_fuzz_callback(queue_cur->id, fault, out_buf, len, trace_bits, MAP_SIZE, splicing_with, (u8*)mutation_sequence, sizeof(mutation_sequence),
+    queue_cur->exec_cksum, cksum);
 
   if (stop_soon) return 1;
 
@@ -6188,8 +6200,6 @@ havoc_stage:
 
   havoc_queued = queued_paths;
 
-  reset_mutation_sequence();
-
   /* We essentially just do several thousand runs (depending on perf_score)
      where we take the input file and make random stacked tweaks. */
 
@@ -6220,7 +6230,7 @@ havoc_stage:
   for (stage_cur = 0; stage_cur < stage_max; stage_cur++) {
 
     /* Fixed length havoc stage */
-
+    reset_mutation_sequence();
     u32 use_stacking = 1 << (1 + UR(HAVOC_STACK_POW2-1));
 
     stage_cur_val = use_stacking;
@@ -8403,7 +8413,7 @@ int main(int argc, char** argv) {
 
   if (queue_cur) show_stats();
 
-  /* If we stopped programmatically, we kill the forkserver and the current runner. 
+  /* If we stopped programmatically, we kill the forkserver and the current runner.
      If we stopped manually, this is done by the signal handler. */
   if (stop_soon == 2) {
       if (child_pid > 0) kill(child_pid, SIGKILL);

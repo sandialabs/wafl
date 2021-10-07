@@ -47,15 +47,15 @@ py_set_post_fuzz_callback(PyObject *self, PyObject *args)
 }
 
 static inline void
-call_py_post_fuzz_callback(u32 id, u8 fault, u8* buf, u32 buf_len, u8* cov, u32 cov_len, u32 splicing_with, u8* seq, u32 seq_len) {
+call_py_post_fuzz_callback(u32 id, u8 fault, u8* buf, u32 buf_len, u8* cov, u32 cov_len, u32 splicing_with, u8* seq, u32 seq_len, u32 old_cksum, u32 new_cksum) {
 
   if(!py_post_fuzz_callback) return;
 
   call_python_callback(py_post_fuzz_callback,
 #ifdef PYTHON3
-                       Py_BuildValue("(i, i, y#, y#, i, y#)", id, fault, buf, buf_len, cov, cov_len, splicing_with, seq, seq_len),
+                       Py_BuildValue("(i, i, y#, y#, i, y#, i, i)", id, fault, buf, buf_len, cov, cov_len, splicing_with, seq, seq_len, old_cksum, new_cksum),
 #else
-                       Py_BuildValue("(i, i, s#, s#, i, s#)", id, fault, buf, buf_len, cov, cov_len, splicing_with, seq, seq_len),
+                       Py_BuildValue("(i, i, s#, s#, i, s#, i, i)", id, fault, buf, buf_len, cov, cov_len, splicing_with, seq, seq_len, old_cksum, new_cksum),
 #endif
                        NULL);
 }
